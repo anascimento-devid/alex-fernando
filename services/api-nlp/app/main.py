@@ -153,6 +153,7 @@ def predict(payload: ReviewIn) -> SentimentOut:
     # TODO Tâche 3 — Appeler inference.predict_sentiment() et logger la requête.
     logger.info(f"Requête /predict : {payload.texte[:80]}")
     prediction = inference.predict_sentiment(state["pipeline"], payload.texte, MODEL_NAME)
+    logger.info(f"scores: {prediction.scores_5_stars}")
     logger.info(f"Réponse /predict : {prediction.sentiment}, latence {prediction.latence_ms:.1f} ms")
     return prediction
     # Pour l'instant, on signale que ce n'est pas implémenté.
