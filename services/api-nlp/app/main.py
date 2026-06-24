@@ -139,6 +139,9 @@ def predict(payload: ReviewIn) -> SentimentOut:
         )
 
     # TODO Tâche 3 — Appeler inference.predict_sentiment() et logger la requête.
+    prediction = inference.predict_sentiment(state["pipeline"], payload.texte, MODEL_NAME)
+    print(prediction)
+    return prediction
     # Pour l'instant, on signale que ce n'est pas implémenté.
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,

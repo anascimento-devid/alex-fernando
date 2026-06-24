@@ -43,8 +43,13 @@ def map_stars_to_sentiment(star_label: str) -> Sentiment:
         ValueError: si `star_label` n'est pas dans le format attendu.
     """
     # TODO Tâche 3 — implémenter le mapping de ton choix et documenter
+    if star_label == '1 star' or star_label == '2 stars':
+        return "négatif"
+    elif star_label == '3 stars':
+        return "neutre"
+    else:
+        return "positif"
     # le raisonnement métier dans le README perso async.
-    raise NotImplementedError("Compléter `map_stars_to_sentiment` (Tâche 3).")
 
 
 def predict_sentiment(pipeline: Any, text: str, model_name: str) -> SentimentOut:
@@ -59,6 +64,15 @@ def predict_sentiment(pipeline: Any, text: str, model_name: str) -> SentimentOut
     Returns:
         SentimentOut avec sentiment 3 classes, scores 5★ bruts, et latence ms.
     """
+    start_time = time.perf_counter()
+    probabilities = pipeline(text, top_k=None)
+    print(probabilities)
+    #dict[str, float]
+    scores_5_stars = {entry['label']: entry['score'] for entry in probabilities}
+    label_argmax = max(scores_5_stars, key=scores_5_stars.get)
+    sentiment = map_stars_to_sentiment(label_argmax)
+    request_length = (time.perf_counter() - start_time) * 1000
+    return SentimentOut(sentiment=sentiment, scores_5_stars=scores_5_stars, model_name=model_name, latence_ms=request_length)
     # TODO Tâche 3 — compléter :
     #
     # 1. Mesurer le temps d'inférence (time.perf_counter() avant/après).
