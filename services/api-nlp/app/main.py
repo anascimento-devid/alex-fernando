@@ -14,10 +14,12 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
+from pathlib import Path
 from loguru import logger
 
 from app import inference
 from app.schemas import HealthOut, InfoOut, ReviewIn, SentimentOut
+
 
 
 # --- Configuration Loguru (compact, lisible pour des apprenants) ---
@@ -26,6 +28,16 @@ from app.schemas import HealthOut, InfoOut, ReviewIn, SentimentOut
 # Pour debugger un cas complexe, repasse à diagnose=True ponctuellement.
 logger.remove()
 logger.add(sys.stderr, level="INFO", backtrace=False, diagnose=False)
+LOG_DIR = Path("logs/api")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+logger.add(
+    LOG_DIR / "api.log",
+    rotation="1 MB",
+    retention="7 days",
+    level="INFO",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+    compression="zip"
+)
 
 
 # --- Filtre access log uvicorn : on n'affiche pas les pings healthcheck ---
@@ -139,8 +151,9 @@ def predict(payload: ReviewIn) -> SentimentOut:
         )
 
     # TODO Tâche 3 — Appeler inference.predict_sentiment() et logger la requête.
+    logger.info(f"Requête /predict : {payload.texte[:80]}")
     prediction = inference.predict_sentiment(state["pipeline"], payload.texte, MODEL_NAME)
-    print(prediction)
+    logger.info(f"Réponse /predict : {prediction.sentiment}, latence {prediction.latence_ms:.1f} ms")
     return prediction
     # Pour l'instant, on signale que ce n'est pas implémenté.
     raise HTTPException(
