@@ -16,12 +16,101 @@ L'URL de l'API est dans la variable d'environnement `API_URL`
 from __future__ import annotations
 
 import os
-
 import streamlit as st
+from typing import Any
+import httpx
+import pandas as pd
 
 
 API_URL: str = os.getenv("API_URL", "http://api-nlp:8000")
+PREDICT_URL = f"{API_URL}/predict"
+HEALTH_URL = f"{API_URL}/health"
+REQUEST_TIMEOUT_SECONDS = 10.0
 
+SENTIMENT_DISPLAY: dict[str, tuple[str, str]] = {
+    "négatif": ("🔴", "Négatif"),
+    "neutre": ("🟠", "Neutre"),
+    "positif": ("🟢", "Positif"),
+}
+
+
+def check_api_health() -> bool:
+    """Vérifie rapidement si l'API NLP est disponible."""
+
+    try:
+        response = httpx.get(HEALTH_URL, timeout=2.0)
+        response.raise_for_status()
+
+        payload = response.json()
+
+        return (
+            payload.get("status") == "ok"
+            and payload.get("model_loaded") is True
+        )
+    except (httpx.HTTPError, ValueError):
+        return False
+
+
+def call_predict_api(texte: str) -> dict[str, Any]:
+    """Envoie une review à l'API de prédiction."""
+
+    response = httpx.post(
+        PREDICT_URL,
+        json={"texte": texte},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+def display_prediction(result: dict[str, Any]) -> None:
+    """Affiche le sentiment et les scores bruts retournés par l'API."""
+
+    sentiment = result.get("sentiment")
+
+    if sentiment not in SENTIMENT_DISPLAY:
+        st.error("L’API a retourné un sentiment inconnu.")
+        return
+
+    emoji, label = SENTIMENT_DISPLAY[sentiment]
+    message = f"{emoji} Sentiment détecté : **{label}**"
+
+    match sentiment:
+        case "positif":
+            st.success(message)
+        case "neutre":
+            st.warning(message)
+        case "négatif":
+            st.error(message)
+        case _:
+            st.error("Sentiment inconnu.")
+
+    scores = result.get("scores_5_stars", {})
+
+    if not scores:
+        st.warning("Les probabilités détaillées ne sont pas disponibles.")
+        return
+
+    scores_dataframe = pd.DataFrame.from_dict(
+        scores,
+        orient="index",
+        columns=["Probabilité"],
+    )
+
+    scores_dataframe.index.name = "Classe"
+
+    st.subheader("Probabilités brutes du modèle")
+    st.bar_chart(scores_dataframe)
+
+    with st.expander("Détails techniques"):
+        st.write(f"**Modèle :** `{result.get('model_name', 'inconnu')}`")
+        st.write(
+            f"**Latence serveur :** "
+            f"{result.get('latence_ms', 'inconnue')} ms"
+        )
+        st.json(result)
 
 st.set_page_config(
     page_title="Aubergine Hôtels — sentiment FR",
@@ -41,29 +130,95 @@ texte = st.text_area(
     placeholder="Ex : Personnel charmant, chambre impeccable, on reviendra !",
 )
 
-if st.button("Analyser", type="primary", disabled=not texte.strip()):
-    # TODO Tâche 4 — Implémenter l'appel HTTP à POST {API_URL}/predict
-    #
-    # Indications :
-    # - Utilise httpx (déjà dans requirements.txt).
-    # - Timeout 10 s.
-    # - En cas d'erreur réseau ou HTTP >= 500 : affiche un message d'erreur
-    #   clair via st.error("...").
-    # - Affiche le sentiment dans un encadré coloré (st.success / st.warning /
-    #   st.error selon la classe).
-    # - Affiche les scores 5 étoiles bruts via st.bar_chart().
-    st.info("📡 Appel API à implémenter — Tâche 4 du brief M0-B2.")
-    st.code(
-        f'httpx.post("{API_URL}/predict", json={{"texte": "..."}}, timeout=10)',
-        language="python",
-    )
+if st.button(
+    "Analyser",
+    type="primary",
+    disabled=not texte.strip(),
+):
+    try:
+        with st.spinner("Analyse en cours..."):
+            prediction = call_predict_api(texte.strip())
+
+        display_prediction(prediction)
+
+    except httpx.TimeoutException:
+        st.error(
+            "L’analyse a dépassé le délai maximal de 10 secondes. "
+            "Réessaie dans quelques instants."
+        )
+
+    except httpx.ConnectError:
+        st.error(
+            "Impossible de joindre l’API NLP. "
+            "Vérifie que le conteneur api-nlp est démarré."
+        )
+
+    except httpx.HTTPStatusError as error:
+        status_code = error.response.status_code
+
+        try:
+            payload = error.response.json()
+            detail = payload.get(
+                "detail",
+                "Erreur retournée par l’API.",
+            )
+        except ValueError:
+            detail = "Réponse d’erreur API invalide."
+
+        match status_code:
+            case 422:
+                st.warning(f"Review invalide : {detail}")
+
+            case 501:
+                st.warning(
+                    "L’interface fonctionne, mais l’endpoint "
+                    "`/predict` n’est pas encore implémenté."
+                )
+
+            case code if code >= 500:
+                st.error(
+                    "Le service NLP rencontre une erreur interne. "
+                    "Consulte les logs du conteneur api-nlp."
+                )
+
+            case _:
+                st.error(
+                    f"Erreur API {status_code} : {detail}"
+                )
+
+    except httpx.RequestError:
+        st.error(
+            "Une erreur réseau empêche de contacter le service NLP."
+        )
+
+    except ValueError:
+        st.error(
+            "La réponse de l’API n’est pas un JSON valide."
+        )
 
 with st.sidebar:
-    st.markdown(f"**API URL** : `{API_URL}`")
+    st.header("État du service")
+
+    if check_api_health():
+        st.success("API NLP disponible")
+    else:
+        st.error("API NLP indisponible")
+
+    st.markdown(f"**API URL :** `{API_URL}`")
     st.markdown(
-        "**Statut** : à brancher (Tâche 4).\n\n"
-        "Une fois branchée, l'UI doit afficher :\n"
-        "- Le sentiment (3 classes)\n"
-        "- Les probas 5★ brutes\n"
-        "- Un message d'erreur clair si l'API tombe"
+        f"**Timeout :** "
+        f"`{REQUEST_TIMEOUT_SECONDS:.0f} secondes`"
+    )
+
+    st.divider()
+
+    st.markdown(
+        """
+        **Résultat attendu**
+
+        - sentiment en trois classes ;
+        - probabilités brutes de 1 à 5 étoiles ;
+        - modèle utilisé ;
+        - latence d’inférence.
+        """
     )
