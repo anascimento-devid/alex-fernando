@@ -1,58 +1,29 @@
-# M0-B2 — Squelette repo (sentiment FR · stack `docker compose`)
+## M0B2 - API NLP Sentiment Analysis
 
-> **Repo template GitHub.** Clique sur **« Use this template »** en haut à
-> droite de cette page → **Create a new repository** → nomme-le
-> `M0-B2-sentiment-<prénom>` sur **ton** compte GitHub personnel.
-> C'est ce nouveau repo que vous clonerez pour travailler.
+Ce projet expose une application de prédiction de sentiment basée sur un modèle NLP Hugging Face.
 
-Brief **M0-B2 « Déployer une IA NLP packagée — sentiment FR chez Aubergine
-Hôtels »** — mercredi semaine 2.
-**Sync** : binôme tiré au sort, 4 h (3h45 + 15 min tour de table).
-**Async** : individuel, 4 h (fork du repo binôme).
-L'énoncé complet est publié sur **Simplonline**.
+L'application permet d'analyser un texte utilisateur et de retourner un sentiment métier en trois classes :
 
----
+- négatif
+- neutre
+- positif
 
-## 🚀 Démarrage (3 commandes)
+Le projet est composé de deux services principaux :
 
-```bash
-# 0. Clone ton repo perso fraîchement créé
-git clone git@github.com:<ton-user>/M0-B2-sentiment-<prenom>.git
-cd M0-B2-sentiment-<prenom>
+- une API FastAPI pour effectuer les prédictions ;
+- une interface Streamlit pour tester l'API facilement.
 
-# 1. Configurer l'environnement
-cp .env.example .env
+## Architecture
 
-# 2. Construire et lancer la stack
-docker compose up --build
-
-# 3. Vérifier
-curl http://localhost:8000/health        # API NLP
-open  http://localhost:8501              # UI Streamlit
+```mermaid
+flowchart TD
+    User[Utilisateur] --> UI[Interface Streamlit]
+    UI --> API[API FastAPI]
+    API --> NLP[Pipeline Hugging Face]
+    API --> Logs[Logs Loguru]
+    NLP --> API
+    API --> UI
 ```
-
-À l'arrêt : `Ctrl+C` puis `docker compose down` (les volumes `models/` et
-`logs/` sont conservés — le modèle HF n'est pas re-téléchargé au prochain `up`).
-
-> ⏱️ Le **1ᵉʳ démarrage** prend 3-5 min de build + 1-3 min de download du
-> modèle DistilCamemBERT (~270 Mo). Les démarrages suivants sont < 30 s grâce
-> au cache volume `models/`.
-
----
-
-## 🧠 Modèle utilisé
-
-**`cmarkea/distilcamembert-base-sentiment`** — DistilCamemBERT FR, 68 M
-paramètres, ~270 Mo.
-
-⚠️ Le modèle sort **5 étoiles** (`'1 star'` … `'5 stars'`). Le métier
-(Aubergine Hôtels) veut **3 classes** (`négatif/neutre/positif`).
-
-→ Tu dois implémenter le **mapping 5★ → 3 classes** dans
-`services/api-nlp/app/inference.py`. **C'est le geste cœur de ce brief**
-(adaptation d'un service au format métier — C6 N2).
-
----
 
 ## 📁 Structure du repo
 
@@ -91,103 +62,217 @@ M0-B2-sentiment-<prenom>/
 
 ---
 
-## ✏️ Endpoints fournis
+## Fonctionnement général
 
-| Endpoint | Statut au clone | Ce que tu dois faire |
-|---|---|---|
-| `GET /health` | ✅ fonctionnel | rien |
-| `GET /info` | ✅ fonctionnel | rien |
-| `POST /predict` | ❌ 501 Not Implemented | implémenter (avec mapping 5→3) |
+L'utilisateur saisit un texte dans l'interface Streamlit.
 
-L'UI Streamlit est lancée mais affiche **« API non branchée »** tant que tu
-n'as pas branché l'appel HTTP dans `services/ui-streamlit/app.py`.
+Streamlit envoie ensuite une requête HTTP POST vers l'API FastAPI sur la route /predict.
 
----
+L'API utilise un pipeline Hugging Face pour obtenir des scores de classification en 5 étoiles :
 
-## 🧭 Démarche attendue
+- 1 star
+- 2 stars
+- 3 stars
+- 4 stars
+- 5 stars
 
-### Sync — mercredi 9h-13h (binôme)
+Ces scores sont ensuite convertis en sentiment métier à 3 classes.
 
-| # | Étape | Mini-cours | Durée |
-|---|---|---|---|
-| 1 | Tirage binômes + démarrage stack | (ce README) | 30 min |
-| 2 | Analyse du squelette + model card HF | — | 30 min |
-| 3 | Implémenter `/predict` + **mapping 5★ → 3 classes** | [`02_HuggingFace_Transformers`](./ressources/02_HuggingFace_Transformers_essentiel.md) | 1 h 15 |
-| 🍴 | **Switch des rôles binôme** (API ↔ UI) | — | 10 min |
-| 4 | Brancher l'UI Streamlit à l'API | [`03_Streamlit`](./ressources/03_Streamlit_essentiel.md) + [`04_API_Integration`](./ressources/04_API_Integration_essentiel.md) | 50 min |
-| 5 | Logging Loguru | mini-cours M0-B1 réutilisé | 30 min |
-| 6 | Tests pytest `/predict` | mini-cours M0-B1 réutilisé | 35 min |
-| 7 | **Tour de table** d'avancement + critères modèle | plénière | 15 min |
+## Mapping métier des sentiments
 
-### Async — jeudi/vendredi (individuel, fork du repo binôme)
+Le modèle produit initialement une note entre 1 et 5 étoiles. Pour rendre le résultat plus lisible côté métier, les notes sont regroupées en trois sentiments :
 
-| # | Étape | Priorité | Durée |
-|---|---|---|---|
-| A | README perso + **schéma Mermaid** d'architecture | 🔴 critique | 1 h |
-| B | **Analyse de ≥ 3 reviews mal classées** + hypothèse explicative | 🔴 critique | 1 h |
-| C | Compléter la collection Postman (≥ 5 requêtes, cas limites) | 🟠 important | 45 min |
-| D | Justification du seuil de mapping retenu (½ page) | 🟠 important | 15 min |
-| E | **Bonus** : healthcheck custom avec retry | 🟢 libre | 30 min |
-| F | **Bonus** : endpoint `/predict/batch` | 🟢 libre | 30 min |
-| G | **Bonus** : pourquoi CamemBERT plutôt qu'un LLM (½ page) | 🟢 libre | 30 min |
+- 1 star / 2 stars -> négatif
+- 3 stars          -> neutre
+- 4 stars / 5 stars -> positif
 
-Cf. [`./ressources/README.md`](./ressources/README.md) pour le détail.
+Ce choix permet d'identifier rapidement les avis clients nécessitant une action.
 
----
+Pour Aubergine Hôtels, un faux négatif peut être coûteux : un client réellement insatisfait pourrait ne pas être traité en priorité. À l'inverse, un faux positif peut donner une vision trop optimiste de la satisfaction client.
 
-## 🎯 Ce qui compte vraiment
+Le mapping conserve donc une classe neutre pour les avis ambigus ou mitigés, au lieu de les classer directement comme positifs ou négatifs.
 
-1. **Une stack qui tourne** avec healthcheck `healthy`. `docker compose up
-   --build` démarre sans erreur.
-2. **Le mapping 5★ → 3 classes implémenté et justifié** (le geste C6 N2).
-3. **L'UI Streamlit branchée à l'API** via le réseau docker interne
-   (nom de service `http://api-nlp:8000`, **pas** `localhost`).
-4. **≥ 3 tests pytest qui passent** depuis le conteneur.
-5. **Un README perso avec schéma Mermaid** lisible.
-6. **L'analyse des reviews mal classées** : ≥ 3 cas avec hypothèse typée
-   (ironie / négation / comparatif / mixte / ambivalence).
+## Réponse de l'API
 
----
+La route /predict retourne une réponse contenant :
 
-## 🤝 Modalité binôme sync — règles du jeu
+- le sentiment final ;
+- les scores détaillés du modèle en 5 étoiles ;
+- le nom du modèle utilisé ;
+- la latence de prédiction en millisecondes.
 
-- **Tirage au sort** par la formatrice mercredi 9h. Pas de libre choix.
-- **Une seule branche commune** (`main`).
-- **Commits identifiés** : `Co-authored-by:` quand vous codez ensemble.
-- **Switch obligatoire à mi-séance** (~10h45) : API ↔ UI, brief mutuel de
-  10 min avant.
-- **Personne ne termine le sync sans avoir touché aux deux côtés.**
+Exemple de réponse :
 
-En async : **fork/clone** du repo binôme dans `M0-B2-sentiment-<prenom>`, tu
-travailles **seul·e**. Livrable critique = README perso + analyse reviews.
+{
+  "sentiment": "positif",
+  "scores_5_stars": {
+    "1 star": 0.001,
+    "2 stars": 0.002,
+    "3 stars": 0.024,
+    "4 stars": 0.327,
+    "5 stars": 0.645
+  },
+  "model_name": "nlptown/bert-base-multilingual-uncased-sentiment",
+  "latence_ms": 348.24
+}
 
----
+## Installation locale
 
-## ✅ Tests & environnement
+Créer un environnement virtuel :
 
-```bash
-docker compose exec api-nlp pytest -v      # tests dans le conteneur API
-docker compose ps                          # api-nlp doit être (healthy)
+python -m venv .venv
+
+Activer l'environnement virtuel :
+
+# Windows
+.venv\Scripts\activate
+# Linux / macOS
+source .venv/bin/activate
+
+Installer les dépendances :
+
+pip install -r requirements.txt
+Lancer l'API en local
+uvicorn app.main:app --reload
+
+L'API est ensuite disponible ici :
+
+```http://localhost:8000```
+
+## Documentation Swagger :
+
+http://localhost:8000/docs
+Lancer l'interface Streamlit en local
+streamlit run ui/streamlit_app.py
+
+L'interface est disponible ici :
+
+```http://localhost:8501```
+
+Lancement avec Docker Compose
+
+Construire et lancer les services :
+
+```docker compose up --build```
+
+## Services disponibles :
+
+API FastAPI : http://localhost:8000
+Interface Streamlit : http://localhost:8501
+
+Arrêter les services :
+
+```
+docker compose down
+```
+## Logs
+
+Les appels à l'API sont journalisés avec Loguru.
+
+Les logs sont écrits dans :
+
+logs/api/api.log
+
+Une rotation est configurée automatiquement :
+
+rotation à partir de 1 MB ;
+conservation pendant 7 days ;
+compression des anciens logs en .zip.
+
+Exemple de configuration :
+
+```
+logger.add(
+    LOG_DIR / "api.log",
+    rotation="1 MB",
+    retention="7 days",
+    compression="zip",
+    level="INFO",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+)
 ```
 
-| Variable (`.env`) | Défaut | Usage |
-|---|---|---|
-| `MODEL_NAME_HF` | `cmarkea/distilcamembert-base-sentiment` | Modèle HF à charger |
-| `MAX_TEXT_LENGTH` | `2000` | Validation Pydantic (longueur max texte) |
+Tests
 
----
+Les tests sont lancés avec pytest.
 
-## 🆘 Bloqué·e ?
+```
+pytest
+```
 
-| Symptôme | À tenter |
-|---|---|
-| `docker compose up` bloqué sur `pulling/building` | 1ᵉʳ build = 3-5 min + 1-3 min download modèle, patiente |
-| `/predict` renvoie toujours 501 | `inference.py` pas encore complété — normal |
-| `/predict` renvoie `"1 star"` au lieu de `"négatif"` | Mapping 5→3 pas implémenté |
-| L'UI affiche « API non branchée » | Compléter `app.py` dans `services/ui-streamlit/` |
-| `Connection refused` depuis l'UI | URL = `http://api-nlp:8000` (nom de service), pas `localhost` |
-| `ModuleNotFoundError` | Rebuild : `docker compose build --no-cache api-nlp` |
-| Service `unhealthy` après 2 min | `docker compose logs api-nlp` (réseau / mémoire / chargement modèle) |
+Configuration utilisée dans pytest.ini :
 
-Logs en temps réel : `docker compose logs -f api-nlp`. **Demande en direct
-mercredi 9h-13h** — Discord ouvert, on est ensemble. RDV vendredi sinon.
+```
+[pytest]
+asyncio_default_fixture_loop_scope = function
+testpaths = tests
+addopts = -ra 
+```
+
+## Routes principales
+- GET /health
+
+Permet de vérifier que l'API est disponible.
+
+Exemple de réponse :
+
+{
+  "status": "ok"
+}
+- POST /predict
+
+Permet d'analyser le sentiment d'un texte.
+
+Exemple de requête :
+
+{
+  "texte": "L'hôtel était très agréable et le personnel très accueillant."
+}
+
+Exemple de réponse :
+
+{
+  "sentiment": "positif",
+  "scores_5_stars": {
+    "1 star": 0.001,
+    "2 stars": 0.002,
+    "3 stars": 0.024,
+    "4 stars": 0.327,
+    "5 stars": 0.645
+  },
+  "model_name": "nlptown/bert-base-multilingual-uncased-sentiment",
+  "latence_ms": 348.24
+}
+## Commandes utiles
+
+Rebuild complet :
+
+```
+docker compose up --build
+```
+
+Arrêter les conteneurs :
+
+```
+docker compose down
+```
+
+Voir les logs Docker :
+
+```
+docker compose logs -f
+```
+## pytest
+
+Lancer les tests :
+```
+pytest -q --disable-warnings
+```
+
+Choix techniques
+- FastAPI : framework léger et performant pour exposer l'API.
+- Streamlit : interface simple pour tester rapidement le modèle.
+- Hugging Face Transformers : utilisation d'un modèle pré-entraîné de classification de sentiment.
+- Docker Compose : orchestration simple des services API et UI.
+- Loguru : logs lisibles avec rotation et compression.
+- Pytest : tests automatisés.
